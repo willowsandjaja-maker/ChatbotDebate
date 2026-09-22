@@ -1,0 +1,19 @@
+{
+  "name": "dream-debate",
+  "version": "1.0.0",
+  "description": "Psychic Interpreter vs NeuroScientist: a voiced chatbot debate on interpreting dreams",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^18.0.2",
+    "express": "^5.2.1",
+    "unpdf": "^1.8.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
