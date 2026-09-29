@@ -112,10 +112,12 @@
 
         <div class="topic"><span>Topic:</span><strong class="glow"></strong></div>
         <button class="end-btn">End Session</button>
+        <button type="button" id="chatbot-settings-btn" class="settings-btn" aria-label="Chatbot Settings">
+          <svg viewBox="0 0 24 24"><use href="#gear" /></svg> Chatbot Settings
+        </button>
 
         <div class="fighter left" data-bot="a">
           <div class="char-mount" data-bot="a"></div>
-          <button class="gear" aria-label="Settings"><svg><use href="#gear" /></svg></button>
           <button class="bot-pause-btn" data-bot="a" aria-label="Pause" title="Pause">
             <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></svg>
             <svg class="icon-play" viewBox="0 0 24 24"><path d="M7 4l14 8-14 8V4z" fill="currentColor"/></svg>
@@ -124,7 +126,6 @@
         </div>
         <div class="fighter right" data-bot="b">
           <div class="char-mount" data-bot="b"></div>
-          <button class="gear" aria-label="Settings"><svg><use href="#gear" /></svg></button>
           <button class="bot-pause-btn" data-bot="b" aria-label="Pause" title="Pause">
             <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></svg>
             <svg class="icon-play" viewBox="0 0 24 24"><path d="M7 4l14 8-14 8V4z" fill="currentColor"/></svg>
@@ -154,9 +155,19 @@
           </button>
         </form>
 
-        <!-- settings popup -->
+        <!-- settings popup: one global panel, both bots as accordion sections -->
         <div id="modal-backdrop" class="hidden">
-          <div id="modal" class="card"></div>
+          <div id="modal" class="card">
+            <button type="button" class="close-btn modal-close-btn" aria-label="Close">
+              <svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+            </button>
+            <div class="card-title modal-title">Chatbot Settings</div>
+            <div class="accordion">
+              <div class="accordion-item" data-section="global"></div>
+              <div class="accordion-item" data-bot="a"></div>
+              <div class="accordion-item" data-bot="b"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -172,25 +183,53 @@
     <div class="card-title"></div>
     <div class="card-sub">Chatbot Setup</div>
     <p class="setup-hint"></p>
-    <label class="field-label">System Prompt</label>
-    <div class="dropzone" tabindex="0" role="button">
-      <span class="dz-text">Drop PDF here</span>
-      <button type="button" class="dz-reset hidden">use default</button>
-      <input type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
-    </div>
-    <div class="knowledge-block hidden">
-      <label class="field-label">Knowledge Notes <span class="kn-count">(0/2)</span></label>
-      <p class="setup-hint kn-hint">Drag 2 research notes onto the bot below to give it real facts to cite.</p>
-      <div class="kn-tray"></div>
-      <div class="kn-drop" tabindex="0" role="button" aria-label="Drop knowledge notes here">
-        <span class="kn-drop-text">Drop 2 notes here</span>
+
+    <div class="field-group prompt-group">
+      <label class="field-label">System Prompt</label>
+      <div class="dropzone" tabindex="0" role="button">
+        <span class="dz-text">Drop PDF here</span>
+        <button type="button" class="dz-reset hidden">use default</button>
+        <input type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
+      </div>
+      <div class="prompt-edit">
+        <textarea class="prompt-textarea" rows="5" spellcheck="false"></textarea>
+        <div class="prompt-edit-foot">
+          <button type="button" class="prompt-upload-btn">Upload file instead</button>
+          <span class="prompt-file-name"></span>
+          <input type="file" class="prompt-file-input" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
+        </div>
       </div>
     </div>
-    <label class="field-label">Voice</label>
-    <div class="select-wrap">
-      <select class="voice-select"></select>
-      <svg viewBox="0 0 20 12"><path d="M2 2l8 8 8-8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+
+    <div class="field-group voice-group">
+      <label class="field-label">Voice</label>
+      <div class="select-wrap">
+        <select class="voice-select"></select>
+        <svg viewBox="0 0 20 12"><path d="M2 2l8 8 8-8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </div>
+      <div class="voice-sliders">
+        <div class="slider-row">
+          <div class="slider-head"><span>Voice Speed</span><span class="slider-val speed-val"></span></div>
+          <input type="range" class="speed-slider" min="0.7" max="1.2" step="0.01" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-head"><span>Voice Pitch</span><span class="slider-val pitch-val"></span></div>
+          <input type="range" class="pitch-slider" min="0" max="2" step="0.1" />
+          <span class="slider-note">Browser voice fallback only — ElevenLabs has no pitch control</span>
+        </div>
+      </div>
     </div>
+
+    <div class="knowledge-block hidden">
+      <label class="field-label">Knowledge Notes <span class="kn-count">(0/2)</span></label>
+      <p class="setup-hint kn-hint">Drag 2 PDF (or text) files onto the box below to give this bot real research to cite.</p>
+      <div class="kn-drop" tabindex="0" role="button" aria-label="Drop knowledge note files here">
+        <span class="kn-drop-text">Drop up to 2 files here, or click to browse</span>
+        <input type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" multiple hidden />
+      </div>
+      <div class="kn-files"></div>
+    </div>
+
     <div class="btn-row">
       <button type="button" class="preview-btn" aria-label="Preview voice" title="Preview voice">&#9654;</button>
       <button type="button" class="apply-btn">Apply Changes</button>

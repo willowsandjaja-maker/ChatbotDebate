@@ -10,6 +10,9 @@
   --teal-card: #5fa6b8;
   --teal-field: #3a8fa6;
   --teal-btn: #03657f;
+  --gold-field: rgba(196, 168, 96, .3);
+  --gold-btn: #8a6a1f;
+  --gold-accent: #e8c675;
 }
 
 * { box-sizing: border-box; }
@@ -61,6 +64,13 @@ button { font: inherit; cursor: pointer; }
   padding: 4px 12px 5px; font-size: 16px; text-shadow: 0 0 6px rgba(255, 190, 190, .7);
 }
 .end-btn:hover { background: #7a1016; }
+.settings-btn {
+  position: absolute; top: 16px; left: 17px; z-index: 5; display: flex; align-items: center; gap: 6px;
+  background: #241a4d; color: #e9e4ff; border: 0; border-radius: 6px;
+  padding: 4px 12px 5px; font-size: 15px;
+}
+.settings-btn svg { width: 17px; height: 17px; }
+.settings-btn:hover { background: #33246b; }
 .back-btn {
   position: absolute; top: 15px; left: 25px; width: 59px; height: 29px; border: 0; border-radius: 6px;
   background: #3a0c9c; display: grid; place-items: center; padding: 0;
@@ -98,6 +108,12 @@ button { font: inherit; cursor: pointer; }
 .card { border-radius: 30px; box-shadow: 0 0 10px rgba(255,255,255,.75), 0 0 26px rgba(255,255,255,.3); }
 .card.purple { background: var(--purple-card); --field: var(--purple-field); --btn: var(--purple-btn); --field-border: rgba(230,225,240,.6); }
 .card.teal { background: var(--teal-card); --field: var(--teal-field); --btn: var(--teal-btn); --field-border: rgba(210,240,248,.55); }
+.accordion-item.purple { --field: var(--purple-field); --btn: var(--purple-btn); --field-border: rgba(230,225,240,.6); }
+.accordion-item.teal { --field: var(--teal-field); --btn: var(--teal-btn); --field-border: rgba(210,240,248,.55); }
+/* Global Instructions: a deliberately different, neutral-gold accent — not purple or teal — so it
+   never reads as a third chatbot, only as the shared layer above both of them. */
+.accordion-item.global { --field: var(--gold-field); --btn: var(--gold-btn); --field-border: rgba(232,198,117,.45); }
+.accordion-item.global .card-title { color: var(--gold-accent); }
 
 .setup-card { position: absolute; left: 539px; top: 60px; width: 336px; height: 460px; padding: 16px 18px; overflow-y: auto; }
 .setup-card .close-btn, .setup-card .card-title { display: none; }
@@ -145,6 +161,29 @@ button { font: inherit; cursor: pointer; }
 }
 .select-wrap select option { color: #111; }
 .select-wrap svg { position: absolute; right: 18px; top: 18px; width: 17px; height: 11px; color: #fff; pointer-events: none; }
+
+.prompt-edit { display: none; }
+.prompt-textarea, .global-textarea {
+  width: 100%; min-height: 70px; max-height: 160px; resize: vertical; border-radius: 12px;
+  background: var(--field); border: 1.6px solid var(--field-border); color: #fff; font: inherit;
+  font-size: 13px; line-height: 1.35; padding: 9px 11px; margin-bottom: 4px; transition: border-color .2s;
+}
+.prompt-textarea:focus, .prompt-textarea.drag, .global-textarea:focus { outline: none; border-color: #fff; }
+.global-textarea { margin-top: 2px; margin-bottom: 12px; }
+.global-hint { font-size: 11px; opacity: .7; margin: 0 0 8px; font-style: italic; }
+.prompt-edit-foot { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; font-size: 11px; }
+.prompt-upload-btn { background: none; border: 0; color: #fff; opacity: .8; text-decoration: underline; font-size: 11px; padding: 0; cursor: pointer; }
+.prompt-upload-btn:hover { opacity: 1; }
+.prompt-file-name { opacity: .6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.voice-sliders { display: none; }
+.slider-row { margin-bottom: 10px; }
+.slider-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; opacity: .92; }
+.slider-val { opacity: .7; font-variant-numeric: tabular-nums; }
+.slider-row input[type="range"] {
+  width: 100%; height: 3px; accent-color: var(--btn); background: var(--field-border); border-radius: 2px;
+}
+.slider-note { display: block; font-size: 10px; opacity: .55; margin-top: 3px; line-height: 1.3; }
 
 .btn-row { display: flex; gap: 8px; }
 .apply-btn { flex: 1; height: 46px; border: 0; border-radius: 12px; background: var(--btn); color: #fff; font-size: 17px; }
@@ -252,23 +291,52 @@ button { font: inherit; cursor: pointer; }
 
 /* settings popup */
 #modal-backdrop { position: absolute; inset: 0; z-index: 10; background: rgba(11,4,33,.35); }
-#modal { position: absolute; left: 309px; top: 30px; width: 334px; height: 470px; padding: 18px 17px 14px; animation: pop .25s ease-out; overflow-y: auto; }
+#modal { position: absolute; left: 309px; top: 30px; width: 334px; height: 470px; padding: 18px 17px 14px; animation: pop .25s ease-out; overflow-y: auto; background: #2a2150; color: #fff; }
 #modal .card-title { font-size: 29px; line-height: 1.05; }
-#modal .card-sub { font-size: 20px; margin-bottom: 10px; }
-#modal .setup-hint { font-size: 12px; line-height: 1.3; margin-bottom: 8px; }
-#modal .field-label { font-size: 15px; margin-bottom: 5px; }
-#modal .dropzone { height: 66px; font-size: 13px; margin-bottom: 10px; }
-#modal .knowledge-block { margin-bottom: 8px; }
-#modal .kn-drop { margin-bottom: 8px; }
-#modal .select-wrap { margin-bottom: 14px; }
-#modal .select-wrap select { font-size: 13px; }
+#modal .field-label { font-size: 14px; margin-bottom: 5px; }
+#modal .select-wrap { margin-bottom: 12px; }
+#modal .select-wrap select { font-size: 13px; height: 40px; }
 #modal .apply-btn { font-size: 18px; text-shadow: var(--glow); }
+#modal .modal-title { margin-bottom: 12px; }
+
+/* Chatbot Settings panel: the system prompt is an editable textarea (not the setup screens'
+   upload-only dropzone), voice speed/pitch sliders are shown, and redundant subheading/hint copy
+   is dropped in favor of a flatter, more compact layout — the setup screens are untouched. */
+#modal .accordion-item .card-sub,
+#modal .accordion-item .setup-hint,
+#modal .accordion-item .kn-hint,
+#modal .accordion-item .dropzone { display: none; }
+#modal .accordion-item .prompt-edit,
+#modal .accordion-item .voice-sliders { display: block; }
+#modal .accordion-item .knowledge-block { margin-top: 4px; margin-bottom: 10px; }
+#modal .accordion-item .kn-drop { margin-bottom: 8px; }
 .close-btn {
   position: absolute; right: -13px; top: -12px; width: 44px; height: 44px; border-radius: 50%;
   border: 0; background: #ddd6ee; display: grid; place-items: center; padding: 0;
 }
 .card.teal .close-btn { color: #1c6f86; }
 .card.purple .close-btn { color: #2a0f6e; }
+.modal-close-btn { color: #2a0f6e; }
+
+/* accordion: both bots' settings live in one panel; only one section open at a time.
+   Kept deliberately flat/minimal — a hairline divider between sections instead of a bordered card. */
+.accordion { display: flex; flex-direction: column; }
+.accordion-item {
+  border: 0; border-bottom: 1px solid rgba(255,255,255,.14); border-radius: 0;
+  padding: 12px 2px 14px; background: none;
+}
+.accordion-item:last-child { border-bottom: 0; }
+#modal .accordion-item .close-btn { display: none; } /* one shared close button at the panel level instead */
+#modal .accordion-item .card-title {
+  font-size: 18px; line-height: 1.2; margin: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+}
+#modal .accordion-item .card-title::after {
+  content: '\25BE'; font-size: 13px; margin-left: 10px; transition: transform .2s ease;
+}
+.accordion-item.open .card-title::after { transform: rotate(180deg); }
+.accordion-item.open .card-title { margin-bottom: 10px; }
+.accordion-item:not(.open) .card-title ~ * { display: none; }
 .close-btn svg { width: 30px; height: 30px; }
 
 /* toast */

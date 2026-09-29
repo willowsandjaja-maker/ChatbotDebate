@@ -7,9 +7,12 @@
 
   // ---------------- state ----------------
   const bots = {
-    a: { prompt: '', promptFile: '', voiceId: '', knowledgeNotes: [] },
-    b: { prompt: '', promptFile: '', voiceId: '', knowledgeNotes: [] },
+    a: { prompt: '', promptFile: '', voiceId: '', knowledgeNotes: [], speed: 1, pitch: 1 },
+    b: { prompt: '', promptFile: '', voiceId: '', knowledgeNotes: [], speed: 1, pitch: 1 },
   };
+  // The global system prompt is intentionally kept separate from `bots.a`/`bots.b` — it's one
+  // shared value injected into both bots' requests, never merged into either bot's own prompt.
+  let globalSettings = { prompt: '' };
   let config = { topics: [], maxAutoTurns: 16, mock: {} };
   let voices = [];
   let currentTopic = null;
@@ -32,7 +35,7 @@
 
   // debate.paused is on if a settings popup is open or the mic is listening.
   function updatePauseState() {
-    debate.paused = !!modalBot || !!rec;
+    debate.paused = !!settingsOpen || !!rec;
   }
   const bothMuted = () => debate.muted.a && debate.muted.b;
 
@@ -89,8 +92,9 @@
     currentTopic = (config.topics || []).find((t) => t.id === topicId);
     if (!currentTopic) return;
     NAMES = { a: currentTopic.bots.a.name, b: currentTopic.bots.b.name, user: 'You' };
-    bots.a = { prompt: '', promptFile: '', voiceId: currentTopic.bots.a.defaultVoiceId, knowledgeNotes: [] };
-    bots.b = { prompt: '', promptFile: '', voiceId: currentTopic.bots.b.defaultVoiceId, knowledgeNotes: [] };
+    bots.a = { prompt: '', promptFile: '', voiceId: currentTopic.bots.a.defaultVoiceId, knowledgeNotes: [], speed: 1, pitch: 1 };
+    bots.b = { prompt: '', promptFile: '', voiceId: currentTopic.bots.b.defaultVoiceId, knowledgeNotes: [], speed: 1, pitch: 1 };
+    globalSettings = { prompt: currentTopic.globalPrompt || '' };
     applyTopicChrome();
     buildSetupCards();
     show('setup-a');
@@ -113,8 +117,6 @@
       const slot = f.dataset.bot;
       const name = currentTopic.bots[slot].name;
       $('.fighter-label', f).textContent = name;
-      const gear = $('.gear', f);
-      gear.setAttribute('aria-label', `${name} settings`);
       const pauseBtn = $('.bot-pause-btn', f);
       pauseBtn.setAttribute('aria-label', `Pause ${name}`);
       pauseBtn.title = `Pause ${name}`;
@@ -226,6 +228,32 @@
     }
     updateApplyState();
 
+    // Editable system-prompt textarea (used by the compact Chatbot Settings panel; the dropzone
+    // above is used unchanged by the setup screens). Pre-filled with the bot's built-in default
+    // persona when no custom prompt has been set yet, and stays fully editable/droppable.
+    const promptTA = $('.prompt-textarea', container);
+    const promptFileBtn = $('.prompt-upload-btn', container);
+    const promptFileInput = $('.prompt-file-input', container);
+    const promptFileName = $('.prompt-file-name', container);
+    const defaultPersona = currentTopic?.bots?.[botId]?.defaultPrompt || '';
+    function refreshPromptEdit() {
+      if (document.activeElement !== promptTA) promptTA.value = draft.prompt || defaultPersona;
+      promptFileName.textContent = draft.promptFile || '';
+    }
+    refreshPromptEdit();
+    promptTA.addEventListener('input', () => {
+      draft.prompt = promptTA.value;
+      draft.promptFile = '';
+      promptFileName.textContent = '';
+      refreshDz();
+      updateApplyState();
+    });
+    promptFileBtn.addEventListener('click', () => promptFileInput.click());
+    promptFileInput.addEventListener('change', () => { handleFile(promptFileInput.files[0]); promptFileInput.value = ''; });
+    ['dragenter', 'dragover'].forEach((ev) => promptTA.addEventListener(ev, (e) => { e.preventDefault(); promptTA.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach((ev) => promptTA.addEventListener(ev, (e) => { e.preventDefault(); promptTA.classList.remove('drag'); }));
+    promptTA.addEventListener('drop', (e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); });
+
     async function handleFile(file) {
       if (!file) return;
       dzText.textContent = 'Reading…';
@@ -239,6 +267,7 @@
         toast(e.message || 'Could not read that file.');
       }
       refreshDz();
+      refreshPromptEdit();
     }
     dz.addEventListener('click', (e) => { if (e.target !== reset) fileInput.click(); });
     dz.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
@@ -246,7 +275,29 @@
     ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('drag'); }));
     ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('drag'); }));
     dz.addEventListener('drop', (e) => handleFile(e.dataTransfer.files[0]));
-    reset.addEventListener('click', (e) => { e.stopPropagation(); draft.prompt = ''; draft.promptFile = ''; refreshDz(); });
+    reset.addEventListener('click', (e) => { e.stopPropagation(); draft.prompt = ''; draft.promptFile = ''; refreshDz(); refreshPromptEdit(); });
+
+    // Voice Speed / Voice Pitch: independent per bot, carried in the same draft/Apply flow as
+    // everything else. Speed is honored for real (forwarded to ElevenLabs); pitch has no ElevenLabs
+    // equivalent, so it's wired honestly to the browser-voice fallback only (see playClip).
+    const speedSlider = $('.speed-slider', container);
+    const pitchSlider = $('.pitch-slider', container);
+    const speedVal = $('.speed-val', container);
+    const pitchVal = $('.pitch-val', container);
+    if (draft.speed == null) draft.speed = 1;
+    if (draft.pitch == null) draft.pitch = 1;
+    speedSlider.value = draft.speed;
+    pitchSlider.value = draft.pitch;
+    speedVal.textContent = `${draft.speed.toFixed(2)}×`;
+    pitchVal.textContent = `${draft.pitch.toFixed(1)}×`;
+    speedSlider.addEventListener('input', () => {
+      draft.speed = parseFloat(speedSlider.value);
+      speedVal.textContent = `${draft.speed.toFixed(2)}×`;
+    });
+    pitchSlider.addEventListener('input', () => {
+      draft.pitch = parseFloat(pitchSlider.value);
+      pitchVal.textContent = `${draft.pitch.toFixed(1)}×`;
+    });
 
     const list = voices.length ? voices : [{ id: draft.voiceId, label: 'Default voice' }];
     if (!list.some((v) => v.id === draft.voiceId)) list.unshift({ id: draft.voiceId, label: 'Default voice' });
@@ -256,9 +307,9 @@
 
     $('.preview-btn', container).addEventListener('click', async () => {
       const line = `Hi, I'm the ${NAMES[botId]}. Let's get into it.`;
-      const audio = await fetchAudio(line, draft.voiceId).catch(() => null);
+      const audio = await fetchAudio(line, draft.voiceId, draft.speed).catch(() => null);
       stopAudio();
-      playClip(audio, line, draft.voiceId);
+      playClip(audio, line, draft.voiceId, draft.speed, draft.pitch);
     });
     applyBtn.addEventListener('click', () => { if (!applyBtn.disabled) onApply({ ...draft }); });
     $('.close-btn', container).addEventListener('click', () => onClose && onClose());
@@ -407,11 +458,11 @@
     window.speechSynthesis?.cancel();
     if (audioDone) { const d = audioDone; audioDone = null; d(); }
   }
-  async function fetchAudio(text, voiceId, signal) {
+  async function fetchAudio(text, voiceId, speed, signal) {
     const r = await fetch('/api/tts', {
       method: 'POST', signal,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, voiceId }),
+      body: JSON.stringify({ text, voiceId, speed }),
     });
     if (r.status === 204) return null; // no ElevenLabs key: browser voice fallback
     if (!r.ok) {
@@ -420,8 +471,10 @@
     }
     return URL.createObjectURL(await r.blob());
   }
-  // Resolves when the clip finishes (or is stopped).
-  function playClip(url, text, voiceId) {
+  // Resolves when the clip finishes (or is stopped). `speed`/`pitch` only affect the browser-voice
+  // fallback (url is null) — real ElevenLabs audio already has speed baked in server-side, and
+  // ElevenLabs has no pitch parameter at all, so pitch is never applied to it.
+  function playClip(url, text, voiceId, speed = 1, pitch = 1) {
     return new Promise((resolve) => {
       audioDone = resolve;
       const finish = () => { if (audioDone === resolve) { audioDone = null; resolve(); } };
@@ -436,6 +489,8 @@
         const u = new SpeechSynthesisUtterance(text);
         const vs = speechSynthesis.getVoices().filter((v) => v.lang.startsWith('en'));
         if (vs.length) u.voice = vs[(voiceId || '').charCodeAt(0) % vs.length];
+        u.rate = speed;
+        u.pitch = pitch;
         const done = () => minDone.then(finish);
         u.onend = done; u.onerror = done;
         speechSynthesis.speak(u);
@@ -446,12 +501,14 @@
   }
 
   // ---------------- debate engine ----------------
-  function botSettingsFor(speaker) { return { systemPrompt: bots[speaker].prompt, voiceId: bots[speaker].voiceId }; }
+  function botSettingsFor(speaker) {
+    return { systemPrompt: bots[speaker].prompt, voiceId: bots[speaker].voiceId, speed: bots[speaker].speed, pitch: bots[speaker].pitch };
+  }
 
   // Get a line of dialogue + its audio for `speaker`, based on a snapshot of the transcript.
   function prepare(speaker, transcriptSnapshot) {
     const controller = new AbortController();
-    const { systemPrompt, voiceId } = botSettingsFor(speaker);
+    const { systemPrompt, voiceId, speed, pitch } = botSettingsFor(speaker);
     const topicId = currentTopic.id;
     const promise = (async () => {
       const r = await fetch('/api/turn', {
@@ -459,6 +516,7 @@
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           topicId, slot: speaker, transcript: transcriptSnapshot, systemPrompt,
+          globalPrompt: globalSettings.prompt, // same value injected into both bots' requests
           knowledgeNotes: (bots[speaker].knowledgeNotes || [])
             .filter((n) => !n.pending)
             .map((n) => ({ label: n.name, text: n.text })),
@@ -467,9 +525,9 @@
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'The chatbot could not respond');
       let audio = null;
-      try { audio = await fetchAudio(data.text, voiceId, controller.signal); }
+      try { audio = await fetchAudio(data.text, voiceId, speed, controller.signal); }
       catch (e) { if (e.name === 'AbortError') throw e; toast(`Voice: ${e.message}`); }
-      return { text: data.text, audio, voiceId };
+      return { text: data.text, audio, voiceId, speed, pitch };
     })();
     promise.catch(() => {}); // handled by whoever awaits it
     return { gen: debate.gen, speaker, version: debate.settingsVersion, promise, controller };
@@ -586,7 +644,7 @@
       setFighter(speaker, 'speaking');
       showBubble(speaker, NAMES[speaker], line.text);
       setSkipVisible(true);
-      await playClip(line.audio, line.text, line.voiceId);
+      await playClip(line.audio, line.text, line.voiceId, line.speed, line.pitch);
       debate.speaking = null;
       setSkipVisible(false);
       if (!alive()) return;
@@ -757,35 +815,74 @@
     })
   );
 
-  // ---------------- settings popup (gear icons) ----------------
-  let modalBot = null;
-  $$('.fighter .gear').forEach((g) =>
-    g.addEventListener('click', () => openModal(g.closest('.fighter').dataset.bot))
-  );
-  function openModal(botId) {
-    modalBot = botId;
+  // ---------------- settings popup (one global button, both bots in an accordion) ----------------
+  let settingsOpen = false;
+  $('#chatbot-settings-btn')?.addEventListener('click', () => openModal());
+
+  // Colors match the mockups (same mapping the old per-bot modal used).
+  const MODAL_COLOR = { a: 'teal', b: 'purple' };
+
+  // Global Instructions section: a lone editable textarea, deliberately much simpler than
+  // mountForm (no voice/knowledge-notes) since it's just one shared value. Kept visually distinct
+  // (see .accordion-item.global in styles.css) so it doesn't read as a third chatbot.
+  function mountGlobalForm(container) {
+    container.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="card-title">Global Instructions</div>
+      <p class="global-hint">Applies to both chatbots</p>
+      <textarea class="global-textarea" rows="5" spellcheck="false"></textarea>
+      <div class="btn-row">
+        <button type="button" class="apply-btn global-apply-btn">Apply Changes</button>
+      </div>
+    `;
+    container.append(...wrap.childNodes);
+    $('.global-textarea', container).value = globalSettings.prompt;
+    $('.global-apply-btn', container).addEventListener('click', () => {
+      globalSettings.prompt = $('.global-textarea', container).value;
+      debate.settingsVersion++;
+      toast('Global Instructions updated. Changes apply from the next turn.', 'info', 2500);
+    });
+  }
+
+  function openModal() {
+    settingsOpen = true;
     updatePauseState(); // finish the current sentence, then wait
     const modal = $('#modal');
-    modal.className = `card ${botId === 'a' ? 'teal' : 'purple'}`; // colors match the mockups
-    mountForm(modal, botId, {
-      draft: { ...bots[botId], knowledgeNotes: bots[botId].knowledgeNotes.map((n) => ({ ...n })) },
-      onApply: (d) => {
-        Object.assign(bots[botId], d);
-        debate.settingsVersion++;
-        toast(`${NAMES[botId]} updated. Changes apply from their next turn.`, 'info', 2500);
-        closeModal();
-      },
-      onClose: () => closeModal(),
+    modal.querySelectorAll('.accordion-item').forEach((item, i) => {
+      const openCls = i === 0 ? ' open' : '';
+      if (item.dataset.section === 'global') {
+        item.className = `accordion-item global${openCls}`;
+        mountGlobalForm(item);
+      } else {
+        const botId = item.dataset.bot;
+        item.className = `accordion-item ${MODAL_COLOR[botId]}${openCls}`;
+        mountForm(item, botId, {
+          draft: { ...bots[botId], knowledgeNotes: bots[botId].knowledgeNotes.map((n) => ({ ...n })) },
+          onApply: (d) => {
+            Object.assign(bots[botId], d);
+            debate.settingsVersion++;
+            toast(`${NAMES[botId]} updated. Changes apply from their next turn.`, 'info', 2500);
+          },
+        });
+      }
+      // The section's own title doubles as this section's accordion toggle.
+      $('.card-title', item).addEventListener('click', () => {
+        const wasOpen = item.classList.contains('open');
+        modal.querySelectorAll('.accordion-item').forEach((it) => it.classList.remove('open'));
+        if (!wasOpen) item.classList.add('open');
+      });
     });
     $('#modal-backdrop').classList.remove('hidden');
   }
   function closeModal(silent) {
-    modalBot = null;
+    settingsOpen = false;
     $('#modal-backdrop').classList.add('hidden');
     if (!silent) updatePauseState();
   }
+  $('.modal-close-btn')?.addEventListener('click', () => closeModal());
   $('#modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') closeModal(); });
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && modalBot) closeModal(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && settingsOpen) closeModal(); });
 
   // ---------------- utils ----------------
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

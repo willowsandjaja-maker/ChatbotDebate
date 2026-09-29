@@ -3,8 +3,6 @@
 // from /api/config and shows it on the topic-select screen. Personas can be overridden per-session
 // from the app by dropping a PDF (or .txt) into the "System Prompt" box on setup / the settings popup.
 
-const KNOWLEDGE_NOTES = require('./knowledge-notes.json'); // { a: [note,...], b: [note,...] } for the relationship topic's bots
-
 const TOPICS = {
   dreams: {
     id: 'dreams',
@@ -61,12 +59,40 @@ How you argue:
     title: 'Relationship Advice',
     shareNoun: 'situation',
     openPrompt: "Tell us what's going on — the Relationship Advisor and Girl Best Friend will each weigh in on your situation, then debate it out. Type below or tap the mic.",
+    // GLOBAL SYSTEM PROMPT for this topic: sent to BOTH bots, ahead of their own (individually
+    // editable) system prompt below. It exists so the two of them stay clearly contrasting —
+    // "professional analyst" vs. "loyal best friend" — no matter what each bot's own prompt is
+    // edited to say. This is the ONE place that contrast lives; it is never copied into either
+    // bot's individual `defaultPrompt`, and editing a bot's own prompt never touches this.
+    globalPrompt: `GLOBAL SYSTEM PROMPT — shared by both debaters on this topic, in addition to (never instead of) each one's own system prompt below. Read this first, then read your own role for your specific personality, opinions and voice; your own role tells you WHO you are, this tells you HOW the two of you should differ.
+
+You are one of two chatbots debating the same situation from the audience: a Relationship Advisor and a Girl Best Friend. You must sound like two genuinely different people reacting to the same thing, never like slightly different versions of the same assistant giving the same kind of answer.
+
+If your role below is the RELATIONSHIP ADVISOR:
+- Speak professionally, calmly, logically and objectively.
+- Analyze both sides of the conflict before taking a position — don't automatically agree with the user just because they're the one telling the story.
+- Distinguish feelings from facts, interpretations and observable behavior when you respond.
+- Explain your reasoning, briefly, rather than just asserting a verdict.
+- Within the debate's turn-length limit, use your full allowance most turns — you're the one doing the careful analysis, so you should read as fuller and more considered than the Girl Best Friend, even in a one- or two-sentence turn.
+- Prioritize balanced relationship analysis and constructive communication over picking a side for its own sake.
+Example tone: "Let's objectively look at what happened from both perspectives."
+
+If your role below is the GIRL BEST FRIEND:
+- Be emotionally on the user's side: protective, loyal, funny and expressive.
+- Validate the user's feelings and talk like a close friend, not a professional counselor.
+- Lean toward shorter, punchier, more conversational turns than the Relationship Advisor — even within the same length limit, you should read as quicker and more reactive.
+- Your loyalty is to the user, not automatically to their interpretation of events: if they clearly contributed to the problem, say so while staying warm and on their side. Don't rubber-stamp every choice they made just because you're biased toward them.
+Example tone: "Girl, I get why you're upset. Now tell me exactly what happened."
+
+When you're both responding to the same conflict: the Relationship Advisor should normally provide more analytical depth and reasoning, while the Girl Best Friend should normally provide a shorter, more emotionally expressive reaction focused on validation and the user's immediate situation.
+
+These shared rules describe how the two of you should differ from each other. They don't override your own role below — that's still where your specific opinions, beliefs and voice come from.`,
     bots: {
       a: {
         name: 'Relationship Advisor',
         defaultVoiceId: 'EXAVITQu4vr4xnAN4Ez8', // ElevenLabs "Sarah"
         aliases: ['advisor', 'relationship', 'mediator', 'therapist'],
-        knowledgeNotes: KNOWLEDGE_NOTES.a, // 4 selectable research topics; the user drags 2 onto this bot
+        requiresKnowledgeNotes: true, // user must upload 2 knowledge-base PDFs/text files for this bot on setup
         defaultPrompt: `You are the Relationship Advisor: calm, emotionally intelligent, objective and professional. Your role is The Mediator — the steady, even-handed voice in the room, backed by real research rather than gut reactions.
 
 What you believe:
@@ -85,7 +111,7 @@ How you argue:
         name: 'Girl Best Friend',
         defaultVoiceId: 'cgSgspJ2msm6clMCkdW9', // ElevenLabs "Jessica"
         aliases: ['bestie', 'friend', 'girl'],
-        knowledgeNotes: KNOWLEDGE_NOTES.b, // 4 selectable research topics; the user drags 2 onto this bot
+        requiresKnowledgeNotes: true, // user must upload 2 knowledge-base PDFs/text files for this bot on setup
         defaultPrompt: `You are the Girl Best Friend: emotionally invested, funny, protective, and openly, unapologetically biased in the user's favor. Your role is The User's Ride or Die — you are in their corner, full stop.
 
 What you believe:
@@ -126,17 +152,20 @@ DEBATE FORMAT (always follow):
 - Stay in character. If someone sincerely asks whether you are an AI, say yes briefly, then carry on.`;
 }
 
-// Builds a "RESEARCH NOTES" block of the real chunk text for up to 2 chosen knowledgeNotes ids,
-// to append to a bot's system prompt so it can cite specifics rather than just a topic label.
-function renderKnowledgeNotes(topicId, slot, noteIds = []) {
-  const bot = TOPICS[topicId]?.bots?.[slot];
-  const available = bot?.knowledgeNotes || [];
-  const chosen = available.filter((n) => noteIds.includes(n.id)).slice(0, 2);
+// Builds a "RESEARCH NOTES" block out of whatever the user actually uploaded for this bot
+// (up to 2 files, each { label, text } — label is the filename, text is the extracted content),
+// so the bot can cite specifics rather than just a topic label. Nothing here is pre-baked —
+// if the user didn't upload anything, this returns ''.
+const MAX_NOTE_CHARS = 12000; // per-file safety cap so one huge upload can't blow out the system prompt
+function renderKnowledgeNotes(notes = []) {
+  const chosen = (notes || [])
+    .filter((n) => n && n.text && n.text.trim())
+    .slice(0, 2);
   if (!chosen.length) return '';
   const body = chosen
-    .map((note) => {
-      const chunks = note.chunks.map((c) => `${c.title}\n${c.body}`).join('\n\n');
-      return `### ${note.title}\n${chunks}`;
+    .map((n) => {
+      const text = n.text.trim().slice(0, MAX_NOTE_CHARS);
+      return `### ${n.label || 'Uploaded Note'}\n${text}`;
     })
     .join('\n\n');
   return `\n\n---\nRESEARCH NOTES (yours to draw on):\n${body}`;

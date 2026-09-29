@@ -40,14 +40,15 @@ app.get('/api/config', (req, res) => {
       title: t.title,
       shareNoun: t.shareNoun,
       openPrompt: t.openPrompt,
+      globalPrompt: t.globalPrompt || '',
       bots: {
         a: {
           name: t.bots.a.name, defaultVoiceId: t.bots.a.defaultVoiceId, aliases: t.bots.a.aliases,
-          knowledgeNotes: (t.bots.a.knowledgeNotes || []).map((n) => ({ id: n.id, title: n.title })),
+          requiresKnowledgeNotes: !!t.bots.a.requiresKnowledgeNotes, defaultPrompt: t.bots.a.defaultPrompt,
         },
         b: {
           name: t.bots.b.name, defaultVoiceId: t.bots.b.defaultVoiceId, aliases: t.bots.b.aliases,
-          knowledgeNotes: (t.bots.b.knowledgeNotes || []).map((n) => ({ id: n.id, title: n.title })),
+          requiresKnowledgeNotes: !!t.bots.b.requiresKnowledgeNotes, defaultPrompt: t.bots.b.defaultPrompt,
         },
       },
     })),
@@ -139,11 +140,19 @@ function buildMessages(topicId, slot, transcript) {
 }
 
 app.post('/api/turn', async (req, res) => {
-  const { topicId, slot, transcript = [], systemPrompt, noteIds = [] } = req.body || {};
+  const { topicId, slot, transcript = [], systemPrompt, knowledgeNotes = [], globalPrompt } = req.body || {};
   const topic = TOPICS[topicId];
   if (!topic || !topic.bots[slot]) return res.status(400).json({ error: 'Unknown topic or bot' });
   const persona = systemPrompt && systemPrompt.trim() ? systemPrompt.trim() : topic.bots[slot].defaultPrompt;
-  const system = persona + renderKnowledgeNotes(topicId, slot, noteIds) + debateRules(topicId, slot);
+  // Hierarchy: GLOBAL SYSTEM PROMPT (topic-wide, shared by both bots) -> individual chatbot
+  // system prompt (custom upload or default persona) -> response. The global prompt is stored
+  // separately from both bots' prompts (never merged into either), and the same value is injected
+  // into both bots' requests. `globalPrompt` here is whatever's currently set in the Global
+  // Instructions section of the settings panel; it falls back to the topic's built-in default
+  // (prompts.js, the single centralized source) when empty.
+  const globalText = globalPrompt && globalPrompt.trim() ? globalPrompt.trim() : (topic.globalPrompt || '').trim();
+  const global = globalText ? `${globalText}\n\n---\n\n` : '';
+  const system = global + persona + renderKnowledgeNotes(knowledgeNotes) + debateRules(topicId, slot);
 
   if (!ANTHROPIC_API_KEY) return res.json({ text: mockLine(topicId, slot, transcript), mock: true });
 
@@ -180,8 +189,11 @@ app.post('/api/turn', async (req, res) => {
 });
 
 // ---------- ElevenLabs: speech ----------
+// ElevenLabs' voice_settings.speed accepts roughly 0.7-1.2; clamp so a stray value never gets rejected.
+const clampSpeed = (n) => Math.min(1.2, Math.max(0.7, Number(n) || 1));
+
 app.post('/api/tts', async (req, res) => {
-  const { text, voiceId } = req.body || {};
+  const { text, voiceId, speed } = req.body || {};
   if (!text) return res.status(400).end();
   if (!ELEVENLABS_API_KEY) return res.status(204).end(); // front end falls back to browser voice
   try {
@@ -190,7 +202,9 @@ app.post('/api/tts', async (req, res) => {
       {
         method: 'POST',
         headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'content-type': 'application/json', accept: 'audio/mpeg' },
-        body: JSON.stringify({ text, model_id: ELEVENLABS_MODEL }),
+        // Note: ElevenLabs has no "pitch" parameter, only speed — pitch is applied client-side for the
+        // browser-voice fallback only (see playClip in app.js), never faked here.
+        body: JSON.stringify({ text, model_id: ELEVENLABS_MODEL, voice_settings: { speed: clampSpeed(speed) } }),
       }
     );
     if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${await r.text()}`);
