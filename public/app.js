@@ -815,6 +815,110 @@
     })
   );
 
+  // ---------------- ESP32 talking LED (Web Serial) ----------------
+  // One LED on the Feather's GPIO 27 lights while either bot is speaking. Protocol (firmware/talking_led):
+  // the board prints READY:<id> on boot, answers ID? with ID:<id>, and takes LED:<0-255> with no reply.
+  const esp32 = (() => {
+    const btn = $('#esp32-btn');
+    const label = $('.esp32-label', btn);
+    // USB-UART bridge chips. The Feather V2 uses a WCH CH9102 (vendor 0x1A86); the rest cover common alternatives.
+    const FILTERS = [0x1a86, 0x10c4, 0x0403, 0x303a, 0x239a].map((usbVendorId) => ({ usbVendorId }));
+    const enc = new TextEncoder();
+    let port = null, reader = null, writer = null, boardId = '', lit = null;
+
+    function render() {
+      btn.classList.toggle('connected', !!port);
+      label.textContent = port ? `ESP32: ${boardId || 'connecting…'}` : 'Connect ESP32';
+      btn.title = port ? 'Disconnect the ESP32' : 'Connect the ESP32 talking LED over USB';
+    }
+
+    function send(line) {
+      if (!writer) return;
+      writer.write(enc.encode(line + '\n')).catch(() => lost());
+    }
+
+    async function readLoop() {
+      const dec = new TextDecoder();
+      let buf = '';
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf('\n')) >= 0) {
+            const m = buf.slice(0, i).trim().match(/^(?:READY|ID):(\S+)$/);
+            buf = buf.slice(i + 1);
+            if (m) { boardId = m[1]; render(); }
+          }
+          if (buf.length > 256) buf = ''; // boot noise with no newline
+        }
+      } catch { /* port closed or unplugged */ }
+    }
+
+    async function connect() {
+      if (!('serial' in navigator)) return toast('The ESP32 connection needs Chrome or Edge (Web Serial).');
+      toast('Pick "USB Single Serial" (the ESP32). Ignore any Bluetooth ports.', 'info', 6000);
+      let p;
+      try { p = await navigator.serial.requestPort({ filters: FILTERS }); }
+      catch { return; } // picker cancelled, or no matching device
+      try { await p.open({ baudRate: 115200 }); }
+      catch {
+        return toast('Couldn\'t open the ESP32 port. Something else is holding it: another tab of this app, the Arduino Serial Monitor, or arduino-cli. Close that and try again.', 'error', 9000);
+      }
+      port = p; boardId = ''; lit = null;
+      writer = port.writable.getWriter();
+      reader = port.readable.getReader();
+      readLoop();
+      render();
+      // Opening the port resets the board; let it boot, then ask who it is.
+      await sleep(1500);
+      if (port !== p) return;
+      send('ID?');
+      setSpeaking(!!debate.speaking);
+      await sleep(1500);
+      if (port === p && !boardId) toast('Connected, but the board didn\'t answer. The talking-LED firmware may not be on it.', 'error', 7000);
+    }
+
+    async function disconnect() {
+      const p = port;
+      if (!p) return;
+      if (writer) { try { await writer.write(enc.encode('LED:0\n')); } catch {} }
+      port = null;
+      try { await reader?.cancel(); } catch {}
+      try { reader?.releaseLock(); } catch {}
+      try { writer?.releaseLock(); } catch {}
+      reader = writer = null;
+      try { await p.close(); } catch {}
+      render();
+    }
+
+    function lost() {
+      if (!port) return;
+      disconnect();
+      toast('ESP32 disconnected. Reseat the USB-C cable, then click Connect ESP32 again.');
+    }
+
+    function setSpeaking(on) {
+      if (!port || on === lit) return;
+      lit = on;
+      send(on ? 'LED:255' : 'LED:0');
+    }
+
+    btn.addEventListener('click', () => (port ? disconnect() : connect()));
+    if ('serial' in navigator) navigator.serial.addEventListener('disconnect', (e) => { if (e.target === port) lost(); });
+    addEventListener('pagehide', () => send('LED:0'));
+    render();
+    return { setSpeaking };
+  })();
+
+  // Mirror debate.speaking to the LED without touching the debate loop: every assignment passes through here.
+  let speakingNow = null;
+  Object.defineProperty(debate, 'speaking', {
+    get: () => speakingNow,
+    set: (v) => { speakingNow = v; esp32.setSpeaking(!!v); },
+  });
+
   // ---------------- settings popup (one global button, both bots in an accordion) ----------------
   let settingsOpen = false;
   $('#chatbot-settings-btn')?.addEventListener('click', () => openModal());

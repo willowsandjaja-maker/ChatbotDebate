@@ -71,6 +71,14 @@ button { font: inherit; cursor: pointer; }
 }
 .settings-btn svg { width: 17px; height: 17px; }
 .settings-btn:hover { background: #33246b; }
+.esp32-btn {
+  position: absolute; top: 48px; left: 17px; z-index: 5; display: flex; align-items: center; gap: 7px;
+  background: #241a4d; color: #e9e4ff; border: 0; border-radius: 6px;
+  padding: 3px 11px 4px; font-size: 13px;
+}
+.esp32-btn:hover { background: #33246b; }
+.esp32-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b6488; }
+.esp32-btn.connected .esp32-dot { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
 .back-btn {
   position: absolute; top: 15px; left: 25px; width: 59px; height: 29px; border: 0; border-radius: 6px;
   background: #3a0c9c; display: grid; place-items: center; padding: 0;
