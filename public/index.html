@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Interpreting Dreams Debate</title>
+  <title>Debate Bots</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Reusable head silhouette (faces right). Mirror it for the NeuroScientist. -->
+  <!-- Reusable head silhouette (faces right). Mirrored for bot "b" via CSS. -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
       <symbol id="head" viewBox="0 0 230 280">
@@ -32,51 +32,57 @@
 
       <!-- ============ 1. Opening page ============ -->
       <section class="screen active" id="screen-opening">
-        <h1 class="glow title">Interpreting Dreams</h1>
-        <h2 class="glow subtitle">Debate</h2>
+        <h1 class="glow title">Dream Debate</h1>
+        <h2 class="glow subtitle">Live Debates</h2>
         <p class="hint">click anywhere to begin</p>
       </section>
 
-      <!-- ============ 2 & 3. Setup pages (one per bot) ============ -->
-      <section class="screen setup-screen" id="screen-setup-psychic" data-bot="psychic">
+      <!-- ============ 2. Topic picker ============ -->
+      <section class="screen" id="screen-topic-select">
+        <h2 class="glow topic-select-title">Choose a Debate</h2>
+        <div class="topic-list"></div>
+      </section>
+
+      <!-- ============ 3 & 4. Setup pages (one per bot) ============ -->
+      <section class="screen setup-screen" id="screen-setup-a" data-bot="a">
         <button class="back-btn" aria-label="Back">
           <svg viewBox="0 0 40 20"><path d="M38 10H4M12 2 3 10l9 8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <button class="end-btn">End Session</button>
         <div class="setup-head">
-          <svg class="head psychic"><use href="#head" /></svg>
-          <div class="glow head-label">Psychic Interpreter</div>
+          <div class="char-mount" data-bot="a"></div>
+          <div class="glow head-label"></div>
         </div>
         <div class="card setup-card purple"></div>
       </section>
 
-      <section class="screen setup-screen" id="screen-setup-neuro" data-bot="neuro">
+      <section class="screen setup-screen" id="screen-setup-b" data-bot="b">
         <button class="back-btn" aria-label="Back">
           <svg viewBox="0 0 40 20"><path d="M38 10H4M12 2 3 10l9 8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <button class="end-btn">End Session</button>
         <div class="setup-head">
-          <svg class="head neuro"><use href="#head" /></svg>
-          <div class="glow head-label">NeuroScientist</div>
+          <div class="char-mount" data-bot="b"></div>
+          <div class="glow head-label"></div>
         </div>
         <div class="card setup-card purple"></div>
       </section>
 
-      <!-- ============ 4. Introducing the chatbots ============ -->
+      <!-- ============ 5. Introducing the chatbots ============ -->
       <section class="screen" id="screen-intro">
-        <div class="topic"><span>Topic:</span><strong class="glow">Interpreting Dreams</strong></div>
+        <div class="topic"><span>Topic:</span><strong class="glow"></strong></div>
         <button class="end-btn">End Session</button>
         <div class="intro-bot left">
-          <svg class="head psychic"><use href="#head" /></svg>
-          <div class="glow head-label">Psychic Interpreter</div>
+          <div class="char-mount" data-bot="a"></div>
+          <div class="glow head-label"></div>
         </div>
         <div class="intro-bot right">
-          <svg class="head neuro"><use href="#head" /></svg>
-          <div class="glow head-label">NeuroScientist</div>
+          <div class="char-mount" data-bot="b"></div>
+          <div class="glow head-label"></div>
         </div>
       </section>
 
-      <!-- ============ 5. The ring ============ -->
+      <!-- ============ 6. The ring ============ -->
       <section class="screen" id="screen-ring">
         <svg class="ring" viewBox="0 0 967 550" preserveAspectRatio="none">
           <!-- floor -->
@@ -104,34 +110,33 @@
           <rect x="752" y="110" width="42" height="190" rx="21" fill="#E80808" />
         </svg>
 
-        <div class="topic"><span>Topic:</span><strong class="glow">Interpreting Dreams</strong></div>
+        <div class="topic"><span>Topic:</span><strong class="glow"></strong></div>
         <button class="end-btn">End Session</button>
-        <button class="pause-btn" id="pause-btn" aria-label="Pause debate" title="Pause">
-          <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="#fff"/><rect x="14" y="4" width="4" height="16" rx="1" fill="#fff"/></svg>
-          <svg class="icon-play" viewBox="0 0 24 24"><path d="M7 4l14 8-14 8V4z" fill="#fff"/></svg>
-        </button>
 
-        <div class="fighter left" data-bot="psychic">
-          <svg class="head psychic"><use href="#head" /></svg>
-          <button class="gear" aria-label="Psychic Interpreter settings"><svg><use href="#gear" /></svg></button>
-          <button class="bot-pause-btn" data-bot="psychic" aria-label="Pause Psychic Interpreter" title="Pause Psychic Interpreter">
+        <div class="fighter left" data-bot="a">
+          <div class="char-mount" data-bot="a"></div>
+          <button class="gear" aria-label="Settings"><svg><use href="#gear" /></svg></button>
+          <button class="bot-pause-btn" data-bot="a" aria-label="Pause" title="Pause">
             <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></svg>
             <svg class="icon-play" viewBox="0 0 24 24"><path d="M7 4l14 8-14 8V4z" fill="currentColor"/></svg>
           </button>
-          <div class="fighter-label">Psychic Interpreter</div>
+          <div class="fighter-label"></div>
         </div>
-        <div class="fighter right" data-bot="neuro">
-          <svg class="head neuro"><use href="#head" /></svg>
-          <button class="gear" aria-label="NeuroScientist settings"><svg><use href="#gear" /></svg></button>
-          <button class="bot-pause-btn" data-bot="neuro" aria-label="Pause NeuroScientist" title="Pause NeuroScientist">
+        <div class="fighter right" data-bot="b">
+          <div class="char-mount" data-bot="b"></div>
+          <button class="gear" aria-label="Settings"><svg><use href="#gear" /></svg></button>
+          <button class="bot-pause-btn" data-bot="b" aria-label="Pause" title="Pause">
             <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></svg>
             <svg class="icon-play" viewBox="0 0 24 24"><path d="M7 4l14 8-14 8V4z" fill="currentColor"/></svg>
           </button>
-          <div class="fighter-label">NeuroScientist</div>
+          <div class="fighter-label"></div>
         </div>
 
         <!-- speech bubble -->
         <div id="bubble" class="bubble hidden" aria-live="polite">
+          <button id="skip-line-btn" class="skip-btn hidden" aria-label="Skip to next" title="Skip to next">
+            <svg viewBox="0 0 24 24"><path d="M4 5v14l10-7L4 5z" fill="currentColor"/><rect x="16" y="5" width="3" height="14" fill="currentColor"/></svg>
+          </button>
           <div class="bubble-name"></div>
           <div class="bubble-text"></div>
         </div>
@@ -172,6 +177,14 @@
       <span class="dz-text">Drop PDF here</span>
       <button type="button" class="dz-reset hidden">use default</button>
       <input type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
+    </div>
+    <div class="knowledge-block hidden">
+      <label class="field-label">Knowledge Notes <span class="kn-count">(0/2)</span></label>
+      <p class="setup-hint kn-hint">Drag 2 research notes onto the bot below to give it real facts to cite.</p>
+      <div class="kn-tray"></div>
+      <div class="kn-drop" tabindex="0" role="button" aria-label="Drop knowledge notes here">
+        <span class="kn-drop-text">Drop 2 notes here</span>
+      </div>
     </div>
     <label class="field-label">Voice</label>
     <div class="select-wrap">

@@ -1,37 +1,40 @@
-/* Interpreting Dreams Debate: front end */
+/* Dream Debate: front end (multi-topic) */
 (() => {
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-  const OTHER = { psychic: 'neuro', neuro: 'psychic' };
-  const NAMES = { psychic: 'Psychic Interpreter', neuro: 'NeuroScientist', user: 'You' };
+  const OTHER = { a: 'b', b: 'a' };
+  let NAMES = { a: 'Bot A', b: 'Bot B', user: 'You' };
 
   // ---------------- state ----------------
   const bots = {
-    psychic: { prompt: '', promptFile: '', voiceId: '' },
-    neuro: { prompt: '', promptFile: '', voiceId: '' },
+    a: { prompt: '', promptFile: '', voiceId: '', knowledgeNotes: [] },
+    b: { prompt: '', promptFile: '', voiceId: '', knowledgeNotes: [] },
   };
-  let config = { maxAutoTurns: 16, mock: {} };
+  let config = { topics: [], maxAutoTurns: 16, mock: {} };
   let voices = [];
+  let currentTopic = null;
+
+  const CHECK_IN_EVERY = 2; // pause and invite the user back in after this many auto-turns (one exchange each)
 
   const debate = {
     running: false,
     gen: 0, // bumps whenever the flow is interrupted; stale async work checks this and bails
     transcript: [],
-    next: 'psychic',
+    next: 'a',
     autoTurns: 0,
+    turnsSinceUser: 0, // resets whenever the user speaks; triggers a check-in pause at CHECK_IN_EVERY
     prefetch: null, // { gen, speaker, version, promise, controller }
     settingsVersion: 0,
     paused: false,
-    userPaused: false, // true when the person hit the Pause button — holds the loop until they hit Resume
-    muted: { psychic: false, neuro: false }, // a muted bot's turns are skipped; the other one keeps going solo
+    muted: { a: false, b: false }, // a muted bot's turns are skipped; the other one keeps going solo
     speaking: null, // { speaker, entry }
   };
 
-  // debate.paused is on if the user paused it, a settings popup is open, or the mic is listening.
+  // debate.paused is on if a settings popup is open or the mic is listening.
   function updatePauseState() {
-    debate.paused = debate.userPaused || !!modalBot || !!rec;
+    debate.paused = !!modalBot || !!rec;
   }
-  const bothMuted = () => debate.muted.psychic && debate.muted.neuro;
+  const bothMuted = () => debate.muted.a && debate.muted.b;
 
   // ---------------- stage scaling ----------------
   const stage = $('#stage');
@@ -61,13 +64,124 @@
   async function boot() {
     try {
       config = await (await fetch('/api/config')).json();
-      bots.psychic.voiceId = config.bots.psychic.defaultVoiceId;
-      bots.neuro.voiceId = config.bots.neuro.defaultVoiceId;
       voices = (await (await fetch('/api/voices')).json()).voices || [];
     } catch {
       toast('Could not reach the server. Is `npm start` running?');
     }
+    buildTopicList();
+  }
+
+  // ---------------- topic picker ----------------
+  function buildTopicList() {
+    const list = $('.topic-list');
+    list.innerHTML = '';
+    (config.topics || []).forEach((topic) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'topic-card';
+      card.innerHTML = `<div class="t-title glow">${escapeHtml(topic.title)}</div><p class="t-sub">${escapeHtml(topic.bots.a.name)} vs. ${escapeHtml(topic.bots.b.name)}</p>`;
+      card.addEventListener('click', () => selectTopic(topic.id));
+      list.append(card);
+    });
+  }
+
+  function selectTopic(topicId) {
+    currentTopic = (config.topics || []).find((t) => t.id === topicId);
+    if (!currentTopic) return;
+    NAMES = { a: currentTopic.bots.a.name, b: currentTopic.bots.b.name, user: 'You' };
+    bots.a = { prompt: '', promptFile: '', voiceId: currentTopic.bots.a.defaultVoiceId, knowledgeNotes: [] };
+    bots.b = { prompt: '', promptFile: '', voiceId: currentTopic.bots.b.defaultVoiceId, knowledgeNotes: [] };
+    applyTopicChrome();
     buildSetupCards();
+    show('setup-a');
+  }
+
+  // Pushes the current topic's names/labels into every screen that shows them.
+  function applyTopicChrome() {
+    if (!currentTopic) return;
+    $('#screen-setup-a .head-label').textContent = currentTopic.bots.a.name;
+    $('#screen-setup-b .head-label').textContent = currentTopic.bots.b.name;
+
+    $$('.topic strong').forEach((el) => (el.textContent = currentTopic.title));
+
+    const introLeft = $('#screen-intro .intro-bot.left .head-label');
+    const introRight = $('#screen-intro .intro-bot.right .head-label');
+    if (introLeft) introLeft.textContent = currentTopic.bots.a.name;
+    if (introRight) introRight.textContent = currentTopic.bots.b.name;
+
+    $$('.fighter').forEach((f) => {
+      const slot = f.dataset.bot;
+      const name = currentTopic.bots[slot].name;
+      $('.fighter-label', f).textContent = name;
+      const gear = $('.gear', f);
+      gear.setAttribute('aria-label', `${name} settings`);
+      const pauseBtn = $('.bot-pause-btn', f);
+      pauseBtn.setAttribute('aria-label', `Pause ${name}`);
+      pauseBtn.title = `Pause ${name}`;
+    });
+    renderCharacters();
+  }
+
+  // ---------------- characters (illustrated bots with blinking/breathing/expressions) ----------------
+  // Coordinates are % of the source image's own width/height, measured from the artwork so the
+  // overlaid eyes/mouth line up with it at any render size. Topics without an entry here (e.g.
+  // Interpreting Dreams) fall back to the generic silhouette symbol.
+  const CHAR_ASSETS = {
+    relationship: {
+      a: { // Relationship Advisor
+        img: 'assets/advisor_base.png',
+        skin: '#a284e3',
+        eyeL: { x: 33.9, y: 25.6, w: 20.1, h: 16.0 },
+        eyeR: { x: 65.4, y: 25.6, w: 20.1, h: 16.0 },
+        mouth: {
+          x: 51.2, y: 43.8, w: 26.1, h: 9.0, viewBox: '0 0 74 32',
+          smile: '<path class="m-smile" d="M6,6 Q37,26 68,6" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round"/>',
+          talk: '<ellipse class="m-talk" cx="37" cy="16" rx="15" ry="9" fill="#2a0f4e"/>',
+          think: '<path class="m-think" d="M14,16 L60,16" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round"/>',
+        },
+      },
+      b: { // Girl Best Friend
+        img: 'assets/bestie_base.png',
+        skin: '#ebaae9',
+        eyeL: { x: 22, y: 25.1, w: 23.5, h: 13.2 },
+        eyeR: { x: 65.5, y: 25.1, w: 23.5, h: 13.2 },
+        mouth: {
+          x: 43.75, y: 40, w: 39.5, h: 14.6, viewBox: '0 0 79 52',
+          smile: '<path class="m-smile" d="M8,26 C8,14 22,10 39,20 C56,10 71,14 71,26 C71,40 55,48 39,44 C23,48 8,40 8,26 Z" fill="#c04e4e" stroke="#000" stroke-width="2.5"/>',
+          talk: '<ellipse class="m-talk" cx="39" cy="28" rx="17" ry="9" fill="#5c1414"/>',
+          think: '<path class="m-think" d="M22,28 L56,28" fill="none" stroke="#c04e4e" stroke-width="5" stroke-linecap="round"/>',
+        },
+      },
+    },
+  };
+
+  function charAssetFor(slot) {
+    return CHAR_ASSETS[currentTopic?.id]?.[slot] || null;
+  }
+
+  function characterHTML(slot) {
+    const asset = charAssetFor(slot);
+    if (!asset) return `<svg class="head ${slot}"><use href="#head" /></svg>`;
+    const eyeStyle = (e, delay) =>
+      `left:${e.x}%;top:${e.y}%;width:${e.w}%;height:${e.h}%;background:${asset.skin};--d:${delay}s`;
+    const m = asset.mouth;
+    return `<div class="char-breathe">
+      <img class="char-img" src="${asset.img}" alt="" draggable="false">
+      <div class="char-eye" style="${eyeStyle(asset.eyeL, (Math.random() * 3).toFixed(2))}"></div>
+      <div class="char-eye" style="${eyeStyle(asset.eyeR, (Math.random() * 3).toFixed(2))}"></div>
+      <svg class="char-mouth" style="left:${m.x}%;top:${m.y}%;width:${m.w}%;height:${m.h}%" viewBox="${m.viewBox}">${m.smile}${m.talk}${m.think}</svg>
+    </div>`;
+  }
+
+  function renderCharacters() {
+    $$('.char-mount').forEach((mount) => {
+      const slot = mount.dataset.bot;
+      const person = !!charAssetFor(slot);
+      mount.classList.toggle('person', person);
+      mount.classList.toggle('silhouette', !person);
+      mount.innerHTML = characterHTML(slot);
+      mount.closest('.fighter')?.classList.toggle('person-bot', person); // moves the gear onto a hand for illustrated characters
+    });
   }
 
   // ---------------- setup form (setup pages + popup) ----------------
@@ -85,6 +199,16 @@
     const reset = $('.dz-reset', dz);
     const select = $('.voice-select', container);
     const applyBtn = $('.apply-btn', container);
+    const notesBlock = $('.knowledge-block', container);
+    const requireNotes = !!currentTopic?.bots?.[botId]?.requiresKnowledgeNotes;
+    if (!Array.isArray(draft.knowledgeNotes)) draft.knowledgeNotes = [];
+
+    function updateApplyState() {
+      const fileOk = !requireFile || !!draft.prompt;
+      const notesOk = !requireNotes || draft.knowledgeNotes.length === 2;
+      applyBtn.disabled = !(fileOk && notesOk);
+      applyBtn.title = fileOk ? (notesOk ? '' : 'Drop exactly 2 knowledge note files onto the bot first') : 'Drop a system prompt file first';
+    }
 
     const refreshDz = () => {
       const loaded = !!draft.prompt;
@@ -92,12 +216,15 @@
       dzText.textContent = loaded ? draft.promptFile : (requireFile ? 'Drop PDF here (required)' : 'Drop PDF here');
       dz.title = loaded ? 'Custom system prompt loaded. Drop another file to replace it.' : (requireFile ? 'A system prompt file is required to continue.' : 'No file = built-in persona');
       reset.classList.toggle('hidden', !loaded || requireFile); // no "use default" once a file is required
-      if (requireFile) {
-        applyBtn.disabled = !loaded;
-        applyBtn.title = loaded ? '' : 'Drop a system prompt file first';
-      }
+      updateApplyState();
     };
     refreshDz();
+
+    if (requireNotes) {
+      notesBlock.classList.remove('hidden');
+      setupKnowledgeUploads(notesBlock, draft, updateApplyState);
+    }
+    updateApplyState();
 
     async function handleFile(file) {
       if (!file) return;
@@ -128,7 +255,7 @@
     select.addEventListener('change', () => (draft.voiceId = select.value));
 
     $('.preview-btn', container).addEventListener('click', async () => {
-      const line = botId === 'psychic' ? 'Your dreams are speaking to you. Shall we listen?' : 'Let’s look at what the evidence says about dreams.';
+      const line = `Hi, I'm the ${NAMES[botId]}. Let's get into it.`;
       const audio = await fetchAudio(line, draft.voiceId).catch(() => null);
       stopAudio();
       playClip(audio, line, draft.voiceId);
@@ -137,16 +264,93 @@
     $('.close-btn', container).addEventListener('click', () => onClose && onClose());
   }
 
+  // Real-file knowledge notes: the user drags (or clicks to browse for) up to 2 actual PDF/text
+  // files onto the drop zone. Each file is read server-side (same /api/prompt-file endpoint the
+  // System Prompt box uses) and the extracted text is appended to that bot's system prompt —
+  // nothing here is pre-loaded or baked into the app.
+  function setupKnowledgeUploads(block, draft, onChange) {
+    const drop = $('.kn-drop', block);
+    const dropText = $('.kn-drop-text', drop);
+    const fileInput = $('input[type=file]', drop);
+    const filesEl = $('.kn-files', block);
+    const countEl = $('.kn-count', block);
+
+    function render() {
+      filesEl.innerHTML = '';
+      draft.knowledgeNotes.forEach((note, i) => {
+        const chip = document.createElement('div');
+        chip.className = 'kn-selected-chip' + (note.pending ? ' pending' : '');
+        const label = document.createElement('span');
+        label.textContent = note.pending ? `Reading ${note.name}…` : `${note.name} (${note.words} words)`;
+        chip.append(label);
+        if (!note.pending) {
+          const rm = document.createElement('button');
+          rm.type = 'button';
+          rm.className = 'kn-remove';
+          rm.textContent = '×';
+          rm.addEventListener('click', () => { draft.knowledgeNotes.splice(i, 1); render(); });
+          chip.append(rm);
+        }
+        filesEl.append(chip);
+      });
+      const doneCount = draft.knowledgeNotes.filter((n) => !n.pending).length;
+      countEl.textContent = `(${doneCount}/2)`;
+      dropText.textContent = draft.knowledgeNotes.length
+        ? 'Drop another file to replace, or click to browse'
+        : 'Drop up to 2 files here, or click to browse';
+      onChange();
+    }
+
+    async function addFile(file) {
+      if (!file) return;
+      if (draft.knowledgeNotes.filter((n) => !n.pending).length >= 2) {
+        toast('Only 2 knowledge note files allowed — remove one first.', 'info', 2500);
+        return;
+      }
+      const entry = { name: file.name, text: '', words: 0, pending: true };
+      draft.knowledgeNotes.push(entry);
+      render();
+      try {
+        const r = await fetch('/api/prompt-file', { method: 'POST', body: file });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error);
+        entry.text = data.text;
+        entry.words = data.words;
+        entry.pending = false;
+      } catch (e) {
+        draft.knowledgeNotes.splice(draft.knowledgeNotes.indexOf(entry), 1);
+        toast(e.message || `Could not read ${file.name}.`);
+      }
+      render();
+    }
+    function addFiles(fileList) {
+      const remaining = 2 - draft.knowledgeNotes.filter((n) => !n.pending).length;
+      const files = [...fileList];
+      if (remaining <= 0) { toast('Only 2 knowledge note files allowed — remove one first.', 'info', 2500); return; }
+      if (files.length > remaining) toast(`Only room for ${remaining} more file${remaining === 1 ? '' : 's'} — using the first ${remaining}.`, 'info', 2500);
+      files.slice(0, remaining).forEach(addFile);
+    }
+
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+    fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag-over'); }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag-over'); }));
+    drop.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+
+    render();
+  }
+
   function buildSetupCards() {
-    ['psychic', 'neuro'].forEach((botId) => {
+    ['a', 'b'].forEach((botId) => {
       const card = $(`#screen-setup-${botId} .setup-card`);
       mountForm(card, botId, {
         requireFile: true,
-        draft: { ...bots[botId] },
+        draft: { ...bots[botId], knowledgeNotes: bots[botId].knowledgeNotes.map((n) => ({ ...n })) },
         onApply: (d) => {
           Object.assign(bots[botId], d);
           stopAudio();
-          if (botId === 'psychic') show('setup-neuro');
+          if (botId === 'a') show('setup-b');
           else startIntro();
         },
       });
@@ -156,18 +360,17 @@
   // ---------------- navigation ----------------
   $('#screen-opening').addEventListener('click', () => {
     unlockAudio();
-    show('setup-psychic');
+    show('topic-select');
   });
-  $('#screen-setup-psychic .back-btn').addEventListener('click', () => show('opening'));
-  $('#screen-setup-neuro .back-btn').addEventListener('click', () => show('setup-psychic'));
+  $('#screen-setup-a .back-btn').addEventListener('click', () => show('topic-select'));
+  $('#screen-setup-b .back-btn').addEventListener('click', () => show('setup-a'));
   $$('.end-btn').forEach((b) => b.addEventListener('click', endSession));
 
   function endSession() {
     stopDebate();
     closeModal(true);
     debate.transcript = [];
-    buildSetupCards();
-    show('opening');
+    show('topic-select');
   }
 
   let introTimer;
@@ -187,7 +390,7 @@
     show('ring');
     if (config.mock?.llm) toast('Demo mode: add ANTHROPIC_API_KEY to .env for real debate lines.', 'info');
     else if (config.mock?.tts) toast('No ELEVENLABS_API_KEY in .env, so the browser voice is used for now.', 'info');
-    beginWithDreamPrompt();
+    beginWithSharePrompt();
   }
 
   // ---------------- audio ----------------
@@ -249,11 +452,17 @@
   function prepare(speaker, transcriptSnapshot) {
     const controller = new AbortController();
     const { systemPrompt, voiceId } = botSettingsFor(speaker);
+    const topicId = currentTopic.id;
     const promise = (async () => {
       const r = await fetch('/api/turn', {
         method: 'POST', signal: controller.signal,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ botId: speaker, transcript: transcriptSnapshot, systemPrompt }),
+        body: JSON.stringify({
+          topicId, slot: speaker, transcript: transcriptSnapshot, systemPrompt,
+          knowledgeNotes: (bots[speaker].knowledgeNotes || [])
+            .filter((n) => !n.pending)
+            .map((n) => ({ label: n.name, text: n.text })),
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'The chatbot could not respond');
@@ -280,29 +489,28 @@
     debate.running = false;
     debate.gen++;
     debate.transcript = [];
-    debate.next = 'psychic';
+    debate.next = 'a';
     debate.autoTurns = 0;
-    debate.userPaused = false;
+    debate.turnsSinceUser = 0;
     debate.paused = false;
-    debate.muted = { psychic: false, neuro: false };
-    setPauseUI();
+    debate.muted = { a: false, b: false };
     setBotPauseUI();
+    setSkipVisible(false);
     dropPrefetch();
   }
 
-  // Starts (or restarts) the debate with the bots' usual opening statements — no shared dream.
+  // Starts (or restarts) the debate with the bots' usual opening statements — no shared prompt.
   function startDebate() {
     resetDebateState();
     debate.running = true;
     runLoop();
   }
 
-  // Opens the ring by asking the audience to share a dream first; the bots then react to it
+  // Opens the ring by asking the audience to share something first; the bots then react to it
   // and the debate grows out of that. "Skip" falls back to the normal opening statements.
-  function beginWithDreamPrompt() {
+  function beginWithSharePrompt() {
     resetDebateState();
-    showBubble('user', 'Before we begin…',
-      "Share a dream you've had — the Psychic Interpreter and NeuroScientist will each respond to it, then debate it out. Type below or tap the mic.",
+    showBubble('user', 'Before we begin…', currentTopic.openPrompt,
       { label: 'Skip — start the debate', onClick: () => { hideBubble(); startDebate(); } });
   }
 
@@ -328,6 +536,12 @@
       if (debate.muted[debate.next] && !debate.muted[OTHER[debate.next]]) {
         dropPrefetch();
         debate.next = OTHER[debate.next];
+      }
+
+      // Pause after a short exchange so this stays a conversation with the user, not the bots running solo.
+      if (debate.turnsSinceUser >= CHECK_IN_EVERY) {
+        showBubble('user', 'Your turn', `What do you think — does that sound right to you? Ask a question, share more about your ${currentTopic.shareNoun}, or let them keep going.`, true);
+        return;
       }
 
       if (debate.autoTurns >= config.maxAutoTurns) {
@@ -360,21 +574,33 @@
       debate.transcript.push(entry);
       debate.next = OTHER[speaker];
       debate.autoTurns++;
+      debate.turnsSinceUser++;
+      const aboutToCheckIn = debate.turnsSinceUser >= CHECK_IN_EVERY;
 
-      // Start preparing the opponent's reply while this one is being spoken.
-      if (debate.autoTurns < config.maxAutoTurns) debate.prefetch = prepare(debate.next, debate.transcript.slice());
+      // Start preparing the opponent's reply while this one is being spoken (skip if we're about to pause for the user).
+      if (debate.autoTurns < config.maxAutoTurns && !aboutToCheckIn) debate.prefetch = prepare(debate.next, debate.transcript.slice());
 
       await waitUntil(() => (!debate.paused && !bothMuted()) || !alive());
       if (!alive()) return;
       debate.speaking = { speaker, entry };
       setFighter(speaker, 'speaking');
       showBubble(speaker, NAMES[speaker], line.text);
+      setSkipVisible(true);
       await playClip(line.audio, line.text, line.voiceId);
       debate.speaking = null;
+      setSkipVisible(false);
       if (!alive()) return;
       setFighter(null);
       await sleep(350);
     }
+  }
+
+  // Does the audience member's text call out one of the bots by name or alias?
+  function wantsSlot(t, slot) {
+    const bot = currentTopic.bots[slot];
+    if ((bot.aliases || []).some((a) => t.includes(a))) return true;
+    const nameWords = bot.name.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    return nameWords.some((w) => t.includes(w));
   }
 
   // The audience butts in.
@@ -387,19 +613,20 @@
     const wasSpeaking = debate.speaking?.speaker;
     stopAudio();
     debate.speaking = null;
+    setSkipVisible(false);
 
     debate.transcript.push({ speaker: 'user', text });
     const t = text.toLowerCase();
-    const wantsPsychic = /psychic|interpreter|madame|medium/.test(t);
-    const wantsNeuro = /neuro|scientist|science|doctor|dr\.?\s/.test(t);
-    if (wantsPsychic && !wantsNeuro) debate.next = 'psychic';
-    else if (wantsNeuro && !wantsPsychic) debate.next = 'neuro';
+    const wantsA = wantsSlot(t, 'a');
+    const wantsB = wantsSlot(t, 'b');
+    if (wantsA && !wantsB) debate.next = 'a';
+    else if (wantsB && !wantsA) debate.next = 'b';
     else if (wasSpeaking) debate.next = wasSpeaking; // the one you cut off answers you
     // otherwise keep whoever was up next
 
     debate.autoTurns = 0;
+    debate.turnsSinceUser = 0; // the user just spoke, so the check-in clock restarts
     debate.running = true;
-    debate.userPaused = false; // answering a message means the debate should proceed
     updatePauseState();
     setFighter(null);
     showBubble('user', 'You', text);
@@ -415,7 +642,7 @@
   }
   const bubble = $('#bubble');
   // `action`: false (no button), true (the classic "Let them keep going" round-over button),
-  // or { label, onClick } for a custom action button (e.g. the dream-prompt's Skip button).
+  // or { label, onClick } for a custom action button (e.g. the opening prompt's Skip button).
   function showBubble(kind, name, text, action = false) {
     bubble.className = `bubble ${kind}`;
     $('.bubble-name', bubble).textContent = name;
@@ -424,7 +651,7 @@
     body.scrollTop = 0;
     $('.continue-btn', bubble)?.remove();
     const spec = action === true
-      ? { label: 'Let them keep going', onClick: () => { debate.autoTurns = 0; debate.gen++; debate.running = true; hideBubble(); runLoop(); } }
+      ? { label: 'Let them keep going', onClick: () => { debate.autoTurns = 0; debate.turnsSinceUser = 0; debate.gen++; debate.running = true; hideBubble(); runLoop(); } }
       : (action && typeof action === 'object' ? action : null);
     if (spec) {
       const b = document.createElement('button');
@@ -440,26 +667,12 @@
     showBubble(speaker, NAMES[speaker], '');
     $('.bubble-text', bubble).innerHTML = '<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
   }
-  function hideBubble() { bubble.className = 'bubble hidden'; }
+  function hideBubble() { bubble.className = 'bubble hidden'; setSkipVisible(false); }
 
-  // ---------------- pause / resume ----------------
-  const pauseBtn = $('#pause-btn');
-  function setPauseUI() {
-    pauseBtn.classList.toggle('active', debate.userPaused);
-    pauseBtn.title = debate.userPaused ? 'Resume debate' : 'Pause debate';
-  }
-  pauseBtn.addEventListener('click', () => {
-    debate.userPaused = !debate.userPaused;
-    updatePauseState();
-    setPauseUI();
-    if (debate.userPaused) {
-      // Pausing holds the loop before the next turn, and freezes whoever's mid-sentence right now.
-      if (debate.speaking) { audioEl.pause(); window.speechSynthesis?.pause(); }
-    } else if (debate.speaking) {
-      if (audioEl.src && audioEl.paused) audioEl.play().catch(() => {});
-      window.speechSynthesis?.resume();
-    }
-  });
+  // ---------------- skip current line ----------------
+  const skipBtn = $('#skip-line-btn');
+  function setSkipVisible(v) { skipBtn.classList.toggle('hidden', !v); }
+  skipBtn.addEventListener('click', () => { if (debate.speaking) stopAudio(); });
 
   // text input
   $('#chat-form').addEventListener('submit', (e) => {
@@ -553,9 +766,9 @@
     modalBot = botId;
     updatePauseState(); // finish the current sentence, then wait
     const modal = $('#modal');
-    modal.className = `card ${botId === 'psychic' ? 'teal' : 'purple'}`; // colors match the mockups
+    modal.className = `card ${botId === 'a' ? 'teal' : 'purple'}`; // colors match the mockups
     mountForm(modal, botId, {
-      draft: { ...bots[botId] },
+      draft: { ...bots[botId], knowledgeNotes: bots[botId].knowledgeNotes.map((n) => ({ ...n })) },
       onApply: (d) => {
         Object.assign(bots[botId], d);
         debate.settingsVersion++;

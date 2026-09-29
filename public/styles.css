@@ -1,7 +1,7 @@
 :root {
   --bg: #0b0421;
-  --psychic: #dccdff;
-  --neuro: #b3efff;
+  --bot-a: #dccdff;
+  --bot-b: #b3efff;
   --glow: 0 0 6px rgba(255, 255, 255, .75), 0 0 16px rgba(255, 255, 255, .35);
   --red-glow: drop-shadow(0 0 4px #ff2b2b) drop-shadow(0 0 12px rgba(255, 30, 30, .75));
   --purple-card: #7a55c2;
@@ -26,10 +26,33 @@ button { font: inherit; cursor: pointer; }
 .hidden { display: none !important; }
 .glow { text-shadow: var(--glow); }
 
-/* ---- heads ---- */
-.head { display: block; overflow: visible; transition: filter .3s ease; }
-.head.psychic { fill: var(--psychic); }
-.head.neuro { fill: var(--neuro); transform: scaleX(-1); }
+/* ---- character mount: filled dynamically by JS with either a silhouette (.head) or an illustrated .person ---- */
+.char-mount { position: relative; display: inline-block; vertical-align: top; }
+
+/* ---- heads (silhouette characters, e.g. Interpreting Dreams) ---- */
+.char-mount .head { display: block; overflow: visible; transition: filter .3s ease; width: 100%; height: 100%; }
+.head.a { fill: var(--bot-a); }
+.head.b { fill: var(--bot-b); transform: scaleX(-1); }
+
+/* ---- illustrated characters (e.g. Relationship Advice) ---- */
+.char-mount.person { margin: 0 auto; }
+.char-breathe { position: relative; display: block; animation: char-breathe 4.2s ease-in-out infinite; transform-origin: 50% 100%; }
+@keyframes char-breathe { 0%, 100% { transform: scale(1, 1) translateY(0); } 50% { transform: scale(1.018, 1.03) translateY(-2px); } }
+.char-img { display: block; width: 100%; height: auto; }
+.char-eye {
+  position: absolute; border-radius: 50%; transform: translate(-50%, -50%) scaleY(0);
+  transform-origin: center;
+}
+.char-mouth { position: absolute; transform: translate(-50%, -50%); overflow: visible; }
+.char-mouth .m-talk, .char-mouth .m-think { opacity: 0; }
+.fighter.speaking .char-mouth .m-smile { opacity: 0; }
+.fighter.speaking .char-mouth .m-talk { opacity: 1; animation: talk-mouth .32s ease-in-out infinite; transform-origin: center; }
+@keyframes talk-mouth { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1.15); } }
+.fighter.thinking .char-eye { animation-play-state: paused; transform: translate(-50%, -50%) scaleY(.55); }
+.fighter.thinking .char-mouth .m-smile { opacity: 0; }
+.fighter.thinking .char-mouth .m-think { opacity: 1; }
+.fighter.speaking .char-breathe, .fighter.thinking .char-breathe { animation-play-state: paused; }
+.fighter.speaking .char-mount.person { filter: var(--red-glow); }
 
 /* ---- shared buttons ---- */
 .end-btn {
@@ -44,18 +67,6 @@ button { font: inherit; cursor: pointer; }
 }
 .back-btn svg { width: 44px; height: 20px; }
 .back-btn:hover { background: #4c16c2; }
-.pause-btn {
-  position: absolute; top: 16px; left: 17px; z-index: 5;
-  width: 36px; height: 36px; border: 0; border-radius: 50%;
-  background: rgba(255,255,255,.18); display: grid; place-items: center; padding: 0;
-  transition: background .2s;
-}
-.pause-btn:hover { background: rgba(255,255,255,.32); }
-.pause-btn svg { width: 17px; height: 17px; }
-.pause-btn .icon-play { display: none; }
-.pause-btn.active { background: #b5271f; box-shadow: 0 0 10px rgba(255,60,60,.5); }
-.pause-btn.active .icon-pause { display: none; }
-.pause-btn.active .icon-play { display: block; }
 
 /* ================= 1. Opening ================= */
 #screen-opening { cursor: pointer; text-align: center; }
@@ -64,34 +75,70 @@ button { font: inherit; cursor: pointer; }
 #screen-opening .hint { position: absolute; bottom: 40px; left: 0; right: 0; margin: 0; font-size: 14px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.45); animation: breathe 2.6s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .35; } }
 
-/* ================= 2/3. Setup ================= */
+/* ================= 2. Topic picker ================= */
+#screen-topic-select { padding: 46px 60px 0; text-align: center; }
+.topic-select-title { margin: 0 0 26px; font-weight: 400; font-size: 32px; }
+.topic-list { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+.topic-card {
+  width: 340px; border-radius: 20px; border: 1.6px solid rgba(255,255,255,.35); background: rgba(255,255,255,.06);
+  padding: 22px 20px; text-align: left; color: #fff; cursor: pointer; transition: background .2s, border-color .2s, transform .2s;
+}
+.topic-card:hover { background: rgba(255,255,255,.14); border-color: #fff; transform: translateY(-2px); }
+.topic-card .t-title { font-size: 22px; margin: 0 0 6px; }
+.topic-card .t-sub { font-size: 14px; opacity: .8; margin: 0; }
+
+/* ================= 3/4. Setup ================= */
 .setup-head { position: absolute; left: 85px; top: 118px; width: 250px; text-align: center; }
-.setup-head .head { width: 222px; height: 248px; margin-left: 24px; }
-.setup-head .head.neuro { margin-left: 4px; transform: none; }
+.setup-head .char-mount { width: 222px; }
+.setup-head .char-mount.silhouette { height: 248px; margin-left: 24px; }
+.setup-head .char-mount.silhouette[data-bot="b"] { margin-left: 4px; }
+.setup-head .char-mount.person[data-bot="b"] { width: 157px; } /* matches bot a's rendered height given each character's own art proportions */
 .head-label { font-size: 24px; margin-top: 30px; }
 
 .card { border-radius: 30px; box-shadow: 0 0 10px rgba(255,255,255,.75), 0 0 26px rgba(255,255,255,.3); }
 .card.purple { background: var(--purple-card); --field: var(--purple-field); --btn: var(--purple-btn); --field-border: rgba(230,225,240,.6); }
 .card.teal { background: var(--teal-card); --field: var(--teal-field); --btn: var(--teal-btn); --field-border: rgba(210,240,248,.55); }
 
-.setup-card { position: absolute; left: 539px; top: 85px; width: 336px; height: 410px; padding: 18px 18px 18px; }
+.setup-card { position: absolute; left: 539px; top: 60px; width: 336px; height: 460px; padding: 16px 18px; overflow-y: auto; }
 .setup-card .close-btn, .setup-card .card-title { display: none; }
-.setup-card .card-sub { font-size: 25px; margin-bottom: 14px; }
+.setup-card .card-sub { font-size: 23px; margin-bottom: 10px; }
 
-.setup-hint { font-size: 13px; line-height: 1.35; opacity: .92; margin: 0 0 12px; }
+.setup-hint { font-size: 13px; line-height: 1.32; opacity: .92; margin: 0 0 9px; }
 
-.field-label { display: block; font-size: 16px; margin: 0 0 7px; }
+.field-label { display: block; font-size: 16px; margin: 0 0 6px; }
 .dropzone {
-  position: relative; height: 78px; border-radius: 16px; background: var(--field);
+  position: relative; height: 66px; border-radius: 16px; background: var(--field);
   border: 1.6px dashed var(--field-border); display: grid; place-items: center; text-align: center;
-  font-size: 16px; padding: 0 16px; margin-bottom: 24px; cursor: pointer; transition: background .2s, border-color .2s;
+  font-size: 15px; padding: 0 16px; margin-bottom: 14px; cursor: pointer; transition: background .2s, border-color .2s;
 }
 .dropzone:hover, .dropzone.drag { border-color: #fff; background: color-mix(in srgb, var(--field) 80%, #fff 20%); }
 .dropzone .dz-text { line-height: 1.25; max-height: 2.6em; overflow: hidden; }
 .dropzone.loaded .dz-text::before { content: '\2713  '; }
 .dz-reset { position: absolute; right: 10px; bottom: 5px; background: none; border: 0; color: rgba(255,255,255,.8); font-size: 11px; text-decoration: underline; padding: 0; }
 
-.select-wrap { position: relative; margin-bottom: 28px; }
+.knowledge-block { margin-bottom: 10px; }
+.kn-count { opacity: .8; font-weight: 400; }
+.kn-hint { margin-bottom: 6px; }
+.kn-drop {
+  position: relative; min-height: 54px; border-radius: 14px; background: rgba(255,255,255,.06);
+  border: 1.6px dashed var(--field-border); display: flex; align-items: center; justify-content: center;
+  padding: 8px 10px; margin-bottom: 8px; transition: background .2s, border-color .2s; cursor: pointer;
+}
+.kn-drop.drag-over { border-color: #fff; background: color-mix(in srgb, var(--field) 65%, #fff 15%); }
+.kn-drop-text { font-size: 12px; opacity: .65; text-align: center; }
+.kn-files { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; min-height: 0; }
+.kn-selected-chip {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 14px; padding: 5px 8px 5px 11px;
+  background: var(--btn); color: #fff; font-size: 12px;
+}
+.kn-selected-chip.pending { background: var(--field); border: 1.4px solid var(--field-border); opacity: .8; }
+.kn-selected-chip .kn-remove {
+  border: 0; background: rgba(255,255,255,.25); color: #fff; border-radius: 50%; width: 16px; height: 16px;
+  font-size: 11px; line-height: 1; display: grid; place-items: center; padding: 0; cursor: pointer;
+}
+.kn-selected-chip .kn-remove:hover { background: rgba(255,255,255,.45); }
+
+.select-wrap { position: relative; margin-bottom: 18px; }
 .select-wrap select {
   width: 100%; height: 48px; appearance: none; -webkit-appearance: none; border-radius: 24px;
   background: var(--field); border: 1.6px solid var(--field-border); color: #fff; font: inherit; font-size: 16px; padding: 0 44px 0 15px; cursor: pointer;
@@ -112,11 +159,13 @@ button { font: inherit; cursor: pointer; }
 .topic strong { display: block; font-weight: 400; font-size: 24px; margin-top: 2px; }
 
 .intro-bot { position: absolute; top: 148px; width: 280px; text-align: center; transition: transform 1s cubic-bezier(.2,.8,.2,1), opacity 1s; }
-.intro-bot .head { width: 222px; height: 250px; }
+.intro-bot .char-mount { width: 210px; }
+.intro-bot .char-mount.silhouette { height: 250px; }
+.intro-bot .char-mount.person[data-bot="b"] { width: 149px; } /* matches bot a's rendered height */
 .intro-bot.left { left: 125px; }
-.intro-bot.left .head { margin-left: 60px; }
+.intro-bot.left .char-mount.silhouette { margin-left: 60px; }
 .intro-bot.right { left: 587px; }
-.intro-bot.right .head { margin-left: 8px; }
+.intro-bot.right .char-mount.silhouette { margin-left: 8px; }
 .intro-bot .head-label { margin-top: 26px; }
 #screen-intro:not(.go) .intro-bot.left { transform: translateX(-260px); opacity: 0; }
 #screen-intro:not(.go) .intro-bot.right { transform: translateX(260px); opacity: 0; }
@@ -124,11 +173,13 @@ button { font: inherit; cursor: pointer; }
 /* ================= 5. Ring ================= */
 .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-.fighter { position: absolute; top: 180px; width: 170px; }
-.fighter .head { width: 162px; height: 188px; }
+.fighter { position: absolute; top: 180px; width: 170px; text-align: center; }
+.fighter .char-mount { width: 155px; }
+.fighter .char-mount.silhouette { width: 162px; height: 188px; }
+.fighter .char-mount.person[data-bot="b"] { width: 110px; } /* matches bot a's rendered height */
 .fighter.left { left: 180px; }
 .fighter.right { left: 610px; top: 190px; }
-.fighter.right .head { width: 158px; height: 176px; }
+.fighter.right .char-mount.silhouette { width: 158px; height: 176px; }
 .fighter-label { position: absolute; top: 196px; white-space: nowrap; color: #111; font-size: 24px; }
 .fighter.left .fighter-label { left: -40px; }
 .fighter.right .fighter-label { left: 11px; top: 186px; }
@@ -142,6 +193,9 @@ button { font: inherit; cursor: pointer; }
 .gear:hover { background: rgba(255,255,255,.35); }
 .fighter.left .gear { left: 24px; top: 60px; color: #6b4fb5; }
 .fighter.right .gear { left: 88px; top: 66px; color: #2f6f82; }
+/* Illustrated characters (e.g. Relationship Advice): move the gear off the face and onto a hand. */
+.fighter.left.person-bot .gear { left: 0px; top: 107px; }
+.fighter.right.person-bot .gear { left: 109px; top: 125px; }
 
 .bot-pause-btn { position: absolute; width: 30px; height: 30px; border: 0; background: none; padding: 6px; border-radius: 50%; box-sizing: content-box; }
 .bot-pause-btn svg { width: 100%; height: 100%; }
@@ -160,15 +214,15 @@ button { font: inherit; cursor: pointer; }
   padding: 10px 14px 12px; box-shadow: 0 0 14px color-mix(in srgb, var(--c, #fff) 55%, transparent);
   display: flex; flex-direction: column; animation: pop .25s ease-out;
 }
-.bubble.psychic { --c: var(--psychic); }
-.bubble.neuro { --c: var(--neuro); }
+.bubble.a { --c: var(--bot-a); }
+.bubble.b { --c: var(--bot-b); }
 .bubble.user { --c: #ffd9b5; left: 300px; width: 367px; top: 300px; max-height: 100px; }
 .bubble::after {
   content: ''; position: absolute; top: 118px; width: 16px; height: 16px; background: #0b0421;
   border: 2px solid var(--c); border-top: 0; border-right: 0;
 }
-.bubble.psychic::after { left: -10px; transform: rotate(45deg); }
-.bubble.neuro::after { right: -10px; transform: rotate(-135deg); }
+.bubble.a::after { left: -10px; transform: rotate(45deg); }
+.bubble.b::after { right: -10px; transform: rotate(-135deg); }
 .bubble.user::after { display: none; }
 .bubble-name { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--c); margin-bottom: 4px; }
 .bubble-text { font-size: 14px; line-height: 1.38; overflow-y: auto; scrollbar-width: thin; }
@@ -178,6 +232,12 @@ button { font: inherit; cursor: pointer; }
 @keyframes blink { 0%, 100% { opacity: .2; } 40% { opacity: 1; } }
 @keyframes pop { from { transform: scale(.92); opacity: 0; } }
 .bubble .continue-btn { margin-top: 8px; align-self: flex-start; border: 0; border-radius: 10px; background: #3a0c9c; color: #fff; padding: 5px 12px; font-size: 13px; }
+.skip-btn {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border: 0; border-radius: 50%;
+  background: rgba(255,255,255,.12); color: var(--c, #fff); display: grid; place-items: center; padding: 4px;
+}
+.skip-btn svg { width: 100%; height: 100%; }
+.skip-btn:hover { background: rgba(255,255,255,.28); }
 
 /* input bar */
 #chat-form { position: absolute; left: 174px; top: 473px; display: flex; align-items: center; gap: 12px; }
@@ -192,13 +252,15 @@ button { font: inherit; cursor: pointer; }
 
 /* settings popup */
 #modal-backdrop { position: absolute; inset: 0; z-index: 10; background: rgba(11,4,33,.35); }
-#modal { position: absolute; left: 309px; top: 59px; width: 334px; height: 405px; padding: 20px 17px 14px; animation: pop .25s ease-out; }
+#modal { position: absolute; left: 309px; top: 30px; width: 334px; height: 470px; padding: 18px 17px 14px; animation: pop .25s ease-out; overflow-y: auto; }
 #modal .card-title { font-size: 29px; line-height: 1.05; }
-#modal .card-sub { font-size: 20px; margin-bottom: 14px; }
-#modal .setup-hint { font-size: 12px; line-height: 1.3; margin-bottom: 10px; }
+#modal .card-sub { font-size: 20px; margin-bottom: 10px; }
+#modal .setup-hint { font-size: 12px; line-height: 1.3; margin-bottom: 8px; }
 #modal .field-label { font-size: 15px; margin-bottom: 5px; }
-#modal .dropzone { height: 80px; font-size: 13px; margin-bottom: 16px; }
-#modal .select-wrap { margin-bottom: 20px; }
+#modal .dropzone { height: 66px; font-size: 13px; margin-bottom: 10px; }
+#modal .knowledge-block { margin-bottom: 8px; }
+#modal .kn-drop { margin-bottom: 8px; }
+#modal .select-wrap { margin-bottom: 14px; }
 #modal .select-wrap select { font-size: 13px; }
 #modal .apply-btn { font-size: 18px; text-shadow: var(--glow); }
 .close-btn {

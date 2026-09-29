@@ -1,35 +1,33 @@
-# Interpreting Dreams: Debate
+# Dream Debate — real-file knowledge notes update
 
-Two AI chatbots, a **Psychic Interpreter** and a **NeuroScientist**, argue about what dreams mean in a boxing ring. They speak with ElevenLabs voices, and you can butt in at any time by typing or using the mic.
+This update changes the "Knowledge Notes" feature so it works with actual PDF (or .txt)
+files you drag in yourself, instead of picking from a hidden pre-loaded list.
 
-## Run it
+## What changed
+- The Knowledge Notes box on the setup screen is now a real file drop zone (like the
+  System Prompt box already was). Drag 2 PDF/text files onto it, or click it to browse.
+- Each file's text is extracted server-side (same mechanism as the System Prompt upload)
+  and the REAL content goes straight into that bot's system prompt for the debate —
+  nothing is pre-baked into the app anymore.
+- `knowledge-notes.json` is no longer used at all. If you still have a copy of it in your
+  project folder, you can safely delete it — nothing references it.
 
-1. Install [Node.js](https://nodejs.org) 18 or newer.
-2. In this folder, run `npm install`.
-3. Copy `.env.example` to `.env` and paste in your `ANTHROPIC_API_KEY` and `ELEVENLABS_API_KEY`.
-4. Run `npm start` and open **http://localhost:3000** in Chrome or Edge (the mic uses Chrome's built-in speech recognition).
+## Files in this update (all full-file replacements)
+- prompts.js
+- server.js
+- public/index.html
+- public/app.js
+- public/styles.css
 
-No keys yet? It still runs. You'll get demo lines and the browser's built-in voice, so you can test the screens.
+## How to install
+1. Back up your current versions of those 5 files if you want a rollback path.
+2. Copy these 5 files into your project, overwriting the old ones at the same paths.
+3. Delete `knowledge-notes.json` from your project root if it's still there (optional cleanup).
+4. Run `npm start` and open http://localhost:3000 — no new npm packages are needed.
 
-## How it works
-
-| Screen | What happens |
-|---|---|
-| Opening | Click anywhere to begin. |
-| Psychic setup | Optional: drop a PDF with a custom system prompt. Pick a voice (default **Matilda**). ▶ previews the voice. |
-| NeuroScientist setup | Same thing (default voice **George**). |
-| Introduction | The two heads slide in face to face, then the debate starts automatically (click to skip). |
-| Ring | They take turns. The speaker's head glows red and their line shows in a speech bubble. |
-
-- **Butting in:** type in the box and press Enter, or click the mic and speak. The current speaker gets cut off and answers you. If you name one of them ("Neuroscientist, …"), that one answers first. Then they go back to debating.
-- **Gear icons:** open the setup popup for that bot mid-debate. The debate pauses while it's open, and changes apply from that bot's next turn.
-- **After 16 lines** without you jumping in, they pause so they don't run up your API bill. Click "Let them keep going" or ask something. You can change the number with `MAX_AUTO_TURNS`.
-- **End Session** stops everything and goes back to the opening page.
-
-## Files
-
-- `server.js`: a small Express server. It keeps your API keys secret and calls Claude (`/api/turn`), ElevenLabs text-to-speech (`/api/tts`) and the voice list (`/api/voices`), and reads text out of PDFs (`/api/prompt-file`).
-- `prompts.js`: the default personalities and the debate rules. The rules (short spoken turns, answer the audience first) are added to every prompt, including ones from your PDFs.
-- `public/`: the front end (`index.html`, `styles.css`, `app.js`). Everything is laid out on a 967×550 stage that matches the mockups and scales to fit the window.
-
-To speed things up, while one bot is talking, the app already writes and voices the other bot's reply.
+## Using it
+On the "Relationship Advice" topic's setup screens, you'll now see a "Knowledge Notes"
+box under the System Prompt box. Drag (or click to browse for) any 2 PDF or text files
+onto it — for example the knowledge-base PDFs from earlier — and their real content will
+be woven into that bot's debate answers. The "Interpreting Dreams" topic is unchanged and
+still only asks for a system prompt file.
